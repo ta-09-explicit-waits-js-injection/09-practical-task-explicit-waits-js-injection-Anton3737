@@ -3,13 +3,20 @@ package com.softserve.academy;
 import io.github.bonigarcia.wdm.WebDriverManager;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.*;
 import org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeOptions;
+import org.openqa.selenium.firefox.FirefoxOptions;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
 
+import java.time.Duration;
+import java.time.LocalDate;
+import java.util.Date;
+import java.util.Random;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -17,13 +24,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GreenCityNegativeRegistrationTest {
     private static WebDriver driver;
+    private static WebDriverWait wait;
+    private static Duration IMPLICIT_WAIT = Duration.ofSeconds(2);
+    private static Duration EXPLICIT_WAIT = Duration.ofSeconds(15);
+    private static Duration PAGE_LOAD_WAIT = Duration.ofSeconds(60);
+    private static final String BASE_URL = "https://www.greencity.cx.ua/#/greenCity";
+
 
     @BeforeAll
     static void setUp() {
-        ChromeOptions options = new ChromeOptions();
+//        ChromeOptions options = new ChromeOptions();
+        FirefoxOptions options = new FirefoxOptions();
+        options.addPreference("intl.accept_languages", "en-GB, en");
 
-        options.addArguments("--lang=en-GB");
-        options.setExperimentalOption("prefs", java.util.Map.of("intl.accept_languages", "en-GB,en"));
+//        options.addArguments("--lang=en-GB");
+//        options.setExperimentalOption("prefs", java.util.Map.of("intl.accept_languages", "en-GB,en"));
 
         if (System.getenv("GITHUB_ACTIONS") != null) {
             options.addArguments(
@@ -33,90 +48,104 @@ class GreenCityNegativeRegistrationTest {
                     "--window-size=1920,1080");
         }
 
-        driver = WebDriverManager.chromedriver().capabilities(options).create();
+//        driver = WebDriverManager.chromedriver().capabilities(options).create();
+        driver = WebDriverManager.firefoxdriver().capabilities(options).create();
         if (System.getenv("GITHUB_ACTIONS") == null) {
             driver.manage().window().maximize();
         }
+        driver.manage().timeouts().implicitlyWait(IMPLICIT_WAIT);
+        driver.manage().timeouts().pageLoadTimeout(PAGE_LOAD_WAIT);
     }
 
     @BeforeEach
     void openRegistrationForm() {
         driver.manage().deleteAllCookies();
-        driver.navigate().to("https://www.greencity.cx.ua/#/greenCity");
-        sleep(5000);
-        driver.findElement(By.cssSelector(".header_sign-up-btn > span")).click();
-        sleep(2000);
+        driver.navigate().to(BASE_URL);
+        wait = new WebDriverWait(driver, EXPLICIT_WAIT);
+        wait.until(ExpectedConditions.elementToBeClickable(By.cssSelector(".header_sign-up-btn"))).click();
+//        WebElement signUpBtn = wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector(".header_sign-up-btn")));
+//        ((JavascriptExecutor) driver).executeScript("arguments[0].click();", signUpBtn);
     }
 
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("invalidEmailValues")
+    // ---------------------- працює
+    @ParameterizedTest(name = "Email: {0}")
     @DisplayName("Invalid email values -> email error")
-    void shouldShowErrorForInvalidEmail(String scenario, String email) {
+    @CsvFileSource(resources = "/invalid_emails.csv", numLinesToSkip = 1)
+    void shouldShowErrorForInvalidEmail(String email) throws InterruptedException {
         typeEmail(email);
+//        typeUsername(name);
+//        typePassword(password);
+//        typeConfirm(confirmPassword);
         blur();
 
         assertEmailErrorVisible();
         assertSignUpButtonDisabled();
     }
 
-    @Test
+    // ---------------------- працює
+    @ParameterizedTest(name = "Scenario: {0}, Email: {1}, Name: {2}, Password: {3},ConfirmPassword: {4}")
+    @CsvSource({"'All fields is empty', '', '', '', ''"})
     @DisplayName("All fields empty → required errors shown")
-    void shouldShowErrorsForAllEmptyFields() {
-        driver.findElement(By.id("email")).click();
-        driver.findElement(By.id("firstName")).click();
-        driver.findElement(By.id("password")).click();
-        driver.findElement(By.id("repeatPassword")).click();
+    void shouldShowErrorsForAllEmptyFields(String scenario, String email, String name, String pass, String confirm) {
+        typeEmail(email);
+        typeUsername(name);
+        typePassword(pass);
+        typeConfirm(confirm);
+
         blur();
 
         assertEmailErrorVisible();
         assertUsernameErrorVisible();
+        assertPasswordErrorVisible();
+        assertConfirmPasswordErrorVisible();
         assertSignUpButtonDisabled();
     }
 
-    @Test
+    // ---------------------- працює
+    @ParameterizedTest(name = "Email: {0}, Name: {1}, Password: {2},ConfirmPassword: {3}")
     @DisplayName("Empty username → username required")
-    void shouldShowErrorForEmptyUsername() {
-        typeEmail("valid@email.com");
-        typePassword("ValidPass123!");
-        typeConfirm("ValidPass123!");
-        driver.findElement(By.id("firstName")).click();
+    @CsvFileSource(resources = "/invalid_names_isempty.csv", numLinesToSkip = 1)
+    void shouldShowErrorForEmptyUsername(String email, String name, String pass, String confirm) {
+        typeEmail(email);
+        typeUsername(name);
+        typePassword(pass);
+        typeConfirm(confirm);
+
         blur();
 
         assertUsernameErrorVisible();
         assertSignUpButtonDisabled();
     }
 
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("invalidPasswords")
+    // ---------------------- працює
+    @ParameterizedTest(name = "Email: {0}, Password: {2}")
     @DisplayName("Invalid password values -> password rule error")
-    void shouldShowErrorForInvalidPassword(String scenario, String password) {
-        fillValidRegistrationDataWithoutConfirm();
+    @CsvFileSource(resources = "/invalid_passwords_tooshort.csv", numLinesToSkip = 1)
+    void shouldShowErrorForInvalidPassword(String scenario, String password) throws InterruptedException {
         typePassword(password);
         blur();
-        sleep(1000);
 
         assertPasswordErrorVisible();
         assertSignUpButtonDisabled();
     }
 
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("invalidConfirmPasswordActions")
-    @DisplayName("Invalid confirm password scenarios -> confirm error")
-    void shouldShowErrorForInvalidConfirmPassword(
-            String scenario,
-            boolean shouldTypeConfirmPassword,
-            String confirmPasswordValue,
-            String expectedMessagePart
-    ) {
-        fillValidRegistrationDataWithoutConfirm();
-        typePassword("ValidPass123!");
-        applyConfirmPasswordState(shouldTypeConfirmPassword, confirmPasswordValue);
+
+    @ParameterizedTest(name = "Email: {0}, Name:{1}, Password:{2}, ConfirmPassword:{3}")
+    @DisplayName("Confirm password mismatch → confirm error")
+    @CsvFileSource(resources = "/password_mismatch.csv", numLinesToSkip = 1)
+    void shouldShowErrorForAllCsvRows(String email, String name, String password, String confirmPassword) {
+        typeEmail(email);
+        typeUsername(name);
+        typePassword(password);
+        typeConfirm(confirmPassword);
+
         blur();
 
         assertConfirmPasswordErrorVisible();
-        assertConfirmPasswordErrorContains(expectedMessagePart);
+        assertConfirmPasswordErrorContains("match");
         assertSignUpButtonDisabled();
     }
+
 
     private static Stream<Arguments> invalidEmailValues() {
         return Stream.of(
@@ -139,33 +168,37 @@ class GreenCityNegativeRegistrationTest {
     }
 
     private void typeEmail(String value) {
-        WebElement field = driver.findElement(By.id("email"));
+        WebElement field = wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("email")));
+//        WebElement field = driver.findElement(By.id("email"));
         field.clear();
         field.sendKeys(value);
     }
 
     private void typeUsername(String value) {
-        WebElement field = driver.findElement(By.id("firstName"));
+        WebElement field = wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("firstName")));
+//        WebElement field = driver.findElement(By.id("firstName"));
         field.clear();
         field.sendKeys(value);
     }
 
     private void typePassword(String value) {
-        WebElement field = driver.findElement(By.id("password"));
+        WebElement field = wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("password")));
+//        WebElement field = driver.findElement(By.id("password"));
         field.clear();
         field.sendKeys(value);
     }
 
     private void typeConfirm(String value) {
-        WebElement field = driver.findElement(By.id("repeatPassword"));
+        WebElement field = wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("repeatPassword")));
+//        WebElement field = driver.findElement(By.id("repeatPassword"));
         field.clear();
         field.sendKeys(value);
     }
 
-    private void fillValidRegistrationDataWithoutConfirm() {
-        typeEmail("valid@email.com");
-        typeUsername("ValidUsername");
-    }
+//    private void fillValidRegistrationDataWithoutConfirm() {
+//        typeEmail("valid@email.com");
+//        typeUsername("ValidUsername");
+//    }
 
     private void applyConfirmPasswordState(boolean shouldTypeConfirmPassword, String confirmPasswordValue) {
         if (shouldTypeConfirmPassword) {
@@ -176,8 +209,10 @@ class GreenCityNegativeRegistrationTest {
     }
 
     private void blur() {
-        driver.findElement(By.id("firstName")).click();
-        sleep(500);
+//        driver.findElement(By.id("firstName")).click();
+//        ((JavascriptExecutor) driver).executeScript(".right-side h2");
+        ((JavascriptExecutor) driver).executeScript("document.activeElement.blur();");
+//        sleep(500);
     }
 
     private void assertEmailErrorVisible() {
@@ -210,22 +245,24 @@ class GreenCityNegativeRegistrationTest {
     }
 
     private void assertSignUpButtonDisabled() {
-        WebElement btn = driver.findElement(By.cssSelector("button[type='submit'].greenStyle"));
+        WebElement btn = wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("button[type='submit'].greenStyle")));
+//        WebElement btn = driver.findElement(By.cssSelector("button[type='submit'].greenStyle"));
         assertFalse(btn.isEnabled(), "The 'Sign Up' button should be disabled");
     }
 
-    private void sleep(long millis) {
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }
+//    private void sleep(long millis) {
+//        try {
+//            Thread.sleep(millis);
+//        } catch (InterruptedException e) {
+//            Thread.currentThread().interrupt();
+//        }
+//    }
 
-    @AfterAll
-    static void tearDown() {
+    @AfterEach
+    void tearDown() {
         if (driver != null) {
-            driver.quit();
+//            driver.quit();
+            driver.navigate().refresh();
         }
     }
 }
